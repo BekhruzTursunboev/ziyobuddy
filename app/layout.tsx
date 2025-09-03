@@ -36,6 +36,14 @@ export default function RootLayout({
             })(window,document,'script','dataLayer','GTM-N8BMZPZK');
           `}
         </Script>
+        <Script
+          id="plausible"
+          defer
+          data-domain="ziyobuddy.vercel.app"
+          data-api="https://plausible.io/api/event"
+          src="https://plausible.io/js/script.js"
+          strategy="afterInteractive"
+        />
       </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
