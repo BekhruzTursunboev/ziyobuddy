@@ -39,8 +39,7 @@ export default function RootLayout({
         <Script
           id="plausible"
           defer
-          data-domain="ziyobuddy.vercel.app"
-          data-api="https://plausible.io/api/event"
+          data-domain="ziyobuddy.com"
           src="https://plausible.io/js/script.js"
           strategy="afterInteractive"
         />
