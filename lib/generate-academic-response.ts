@@ -19,9 +19,9 @@ export async function generateAcademicResponse(
 
 MUHIM QOIDALAR:
 - Javobingiz QISQA va ANIQ bo'lsin
-- Faqat  muhim ma'lumotlarni bering
+-  muhim ma'lumotlarni bering
 - Ilmiy terminlardan foydalaning, lekin sodda tilda tushuntiring
-- Ortiqcha tafsilotlarsiz, to'g'ridan-to'g'ri javob bering
+- to'g'ridan-to'g'ri javob bering
 - O'zbek tilida yozing
 -kodham yoza olasan
 
@@ -33,7 +33,7 @@ Qisqa va aniq javob:`,
             },
           ],
           generationConfig: {
-            maxOutputTokens: 500,
+            maxOutputTokens: 600,
             temperature: 0.7,
           },
         }),
