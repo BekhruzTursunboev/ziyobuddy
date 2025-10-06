@@ -47,6 +47,6 @@ Qisqa va aniq javob:`,
     );
   } catch (error) {
     console.error("Gemini API error:", error);
-    return "Kechirasiz, hozirda javob bera olmayapman. Iltimos, keyinroq urinib ko'ring.";
+    return "Kechirasiz, hozircha javob bera olmayapman. Iltimos, keyinroq urinib ko'ring.";
   }
 }
