@@ -8,7 +8,7 @@ export async function generateAcademicResponse(
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-goog-api-key": "AIzaSyAqG6a7LbsbahjiSWpw93xywkyFpxanv6U",
+          "X-goog-api-key": "AIzaSyDp5Nl-9hQJhQKhsqmG3tgGtrWvndiuk5I",
         },
         body: JSON.stringify({
           contents: [
