@@ -4,13 +4,7 @@ import type React from "react";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +22,6 @@ import {
   Clock,
   RotateCcw,
   MessageSquare,
-  Lightbulb,
   Star,
   Heart,
   Flame,
@@ -99,8 +92,7 @@ export default function ZiyoBuddyPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
-  const [studySessions, setStudySessions] = useState<StudySession[]>([]);
-  const [currentStreak, setCurrentStreak] = useState(0);
+  const [currentStreak] = useState(0);
   const [totalMessages, setTotalMessages] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -189,15 +181,6 @@ export default function ZiyoBuddyPage() {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, botMessage]);
-
-        // Add study session
-        const newSession: StudySession = {
-          id: Date.now(),
-          subject: "Umumiy",
-          duration: 1,
-          date: new Date().toLocaleDateString("uz-UZ"),
-        };
-        setStudySessions((prev) => [...prev.slice(-9), newSession]);
       } catch (error) {
         console.error("Error:", error);
         const errorMessage: Message = {
