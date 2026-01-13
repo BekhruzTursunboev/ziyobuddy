@@ -51,13 +51,6 @@ interface QuickTopic {
   color: string;
 }
 
-interface StudySession {
-  id: number;
-  subject: string;
-  duration: number;
-  date: string;
-}
-
 export default function ZiyoBuddyPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
