@@ -141,7 +141,7 @@ MUHIM QOIDALAR:
  */
 export async function validateApiKey(): Promise<boolean> {
   try {
-    const response = await fetch("https://api.groq.com/v1/models", {
+    const response = await fetch("https://api.groq.com/openai/v1/models", {
       method: "GET",
       headers: {
         Authorization: `Bearer ${API_KEY}`,
