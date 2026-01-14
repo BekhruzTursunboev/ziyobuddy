@@ -26,7 +26,6 @@ import {
   Heart,
   Flame,
 } from "lucide-react";
-import { generateAcademicResponse } from "@/lib/groq";
 
 interface Message {
   id: string;
@@ -166,10 +165,26 @@ export default function ZiyoBuddyPage() {
       setIsLoading(true);
 
       try {
-        const response = await generateAcademicResponse(input);
+        const response = await fetch("/api/chat", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ prompt: input }),
+        });
+
+        if (!response.ok) {
+          throw new Error("API request failed");
+        }
+
+        const data = await response.json();
+
         const botMessage: Message = {
           id: (Date.now() + 1).toString(),
-          text: response,
+          text:
+            data.response ||
+            data.error ||
+            "Kechirasiz, hozircha javob bera olmayapman. Iltimos, keyinroq urinib ko'ring yoki savolingizni qayta yozing. 🤔",
           isUser: false,
           timestamp: new Date(),
         };
