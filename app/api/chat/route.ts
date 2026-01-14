@@ -34,10 +34,14 @@ function delay(ms: number): Promise<void> {
 
 export async function POST(request: NextRequest) {
   try {
+    console.log("API route called");
     const body = await request.json();
     const { prompt, config } = body;
 
+    console.log("Prompt received:", prompt?.substring(0, 50));
+
     if (!prompt || typeof prompt !== "string") {
+      console.error("Invalid prompt provided");
       return NextResponse.json(
         { error: "Invalid prompt provided" },
         { status: 400 }
@@ -46,11 +50,18 @@ export async function POST(request: NextRequest) {
 
     if (!API_KEY) {
       console.error("GROQ_API_KEY is not configured");
+      console.error(
+        "Available env vars:",
+        Object.keys(process.env).filter((k) => k.includes("GROQ"))
+      );
       return NextResponse.json(
         { error: "API key not configured" },
         { status: 500 }
       );
     }
+
+    console.log("API Key length:", API_KEY.length);
+    console.log("API Key prefix:", API_KEY.substring(0, 7) + "...");
 
     const generationConfig: GenerationConfig = {
       max_tokens: config?.max_tokens || 800,
