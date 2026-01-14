@@ -1,4 +1,4 @@
-const API_KEY = process.env.NEXT_PUBLIC_GROQ_API_KEY || "";
+const API_KEY = process.env.GROQ_API_KEY || "";
 const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
