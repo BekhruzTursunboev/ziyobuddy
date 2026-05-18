@@ -3,10 +3,10 @@
 import type React from "react";
 
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import ReactMarkdown from "react-markdown";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import {
   BookOpen,
@@ -25,6 +25,9 @@ import {
   Star,
   Heart,
   Flame,
+  Copy,
+  Volume2,
+  VolumeX,
 } from "lucide-react";
 
 interface Message {
@@ -49,6 +52,9 @@ interface QuickTopic {
   title: string;
   color: string;
 }
+
+// Quick topics configuration
+// (We continue with states)
 
 export default function ZiyoBuddyPage() {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -84,20 +90,53 @@ export default function ZiyoBuddyPage() {
   const [isTyping, setIsTyping] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [showWelcome, setShowWelcome] = useState(true);
-  const [currentStreak] = useState(0);
+  const [xp, setXp] = useState<number>(0);
+  const [level, setLevel] = useState<number>(1);
+  const [currentStreak, setCurrentStreak] = useState<number>(2);
+  const [learningMode, setLearningMode] = useState<"explain" | "quiz" | "summary">("explain");
+  const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
+
+  // Gamified Level-Up Sound & Logic
+  useEffect(() => {
+    const xpNeeded = level * 100;
+    if (xp >= xpNeeded) {
+      setXp((prev) => prev - xpNeeded);
+      setLevel((prev) => prev + 1);
+      if (typeof window !== "undefined") {
+        try {
+          const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+          const oscillator = audioCtx.createOscillator();
+          const gainNode = audioCtx.createGain();
+          oscillator.type = "sine";
+          oscillator.frequency.setValueAtTime(523.25, audioCtx.currentTime); // C5
+          oscillator.frequency.setValueAtTime(659.25, audioCtx.currentTime + 0.15); // E5
+          oscillator.frequency.setValueAtTime(783.99, audioCtx.currentTime + 0.3); // G5
+          oscillator.frequency.setValueAtTime(1046.5, audioCtx.currentTime + 0.45); // C6
+          gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+          gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.8);
+          oscillator.connect(gainNode);
+          gainNode.connect(audioCtx.destination);
+          oscillator.start();
+          oscillator.stop(audioCtx.currentTime + 0.8);
+        } catch (e) {
+          console.log("Audio not supported or blocked");
+        }
+      }
+    }
+  }, [xp, level]);
   const [totalMessages, setTotalMessages] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   // Optimized scroll function
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, []);
 
-  // Auto-scroll when messages change
+  // Auto-scroll when messages or loading state changes
   useEffect(() => {
     scrollToBottom();
-  }, [messages, scrollToBottom]);
+  }, [messages, isLoading, scrollToBottom]);
 
   // Clock with smooth updates - only on client side
   useEffect(() => {
@@ -160,9 +199,15 @@ export default function ZiyoBuddyPage() {
         timestamp: new Date(),
       };
 
-      setMessages((prev) => [...prev, userMessage]);
+      const updatedMessages = [...messages, userMessage];
+      setMessages(updatedMessages);
       setInput("");
       setIsLoading(true);
+
+      // Auto-reset textarea height
+      if (inputRef.current) {
+        inputRef.current.style.height = "auto";
+      }
 
       try {
         const response = await fetch("/api/chat", {
@@ -170,7 +215,16 @@ export default function ZiyoBuddyPage() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ prompt: input }),
+          body: JSON.stringify({
+            prompt: input,
+            history: updatedMessages.map((m) => ({
+              isUser: m.isUser,
+              text: m.text,
+            })),
+            config: {
+              mode: learningMode,
+            },
+          }),
         });
 
         if (!response.ok) {
@@ -189,6 +243,7 @@ export default function ZiyoBuddyPage() {
           timestamp: new Date(),
         };
         setMessages((prev) => [...prev, botMessage]);
+        setXp((x) => x + 15); // Award +15 XP for a successful question!
       } catch (error) {
         console.error("Error:", error);
         const errorMessage: Message = {
@@ -203,7 +258,7 @@ export default function ZiyoBuddyPage() {
         inputRef.current?.focus();
       }
     },
-    [input, isLoading]
+    [input, isLoading, messages, learningMode]
   );
 
   // Clear chat function
@@ -227,6 +282,42 @@ export default function ZiyoBuddyPage() {
     );
   }, []);
 
+  // Text to Speech Vocalizer
+  const toggleSpeech = useCallback((id: string, text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+
+    if (speakingMessageId === id) {
+      window.speechSynthesis.cancel();
+      setSpeakingMessageId(null);
+    } else {
+      window.speechSynthesis.cancel();
+      const cleanText = text
+        .replace(/[#*`_~]/g, "")
+        .replace(/\[([^\]]+)\]\([^\)]+\)/g, "$1");
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      const voices = window.speechSynthesis.getVoices();
+      const trVoice = voices.find((v) => v.lang.startsWith("tr"));
+      const ruVoice = voices.find((v) => v.lang.startsWith("ru"));
+      const enVoice = voices.find((v) => v.lang.startsWith("en"));
+      
+      if (trVoice) utterance.voice = trVoice;
+      else if (ruVoice) utterance.voice = ruVoice;
+      else if (enVoice) utterance.voice = enVoice;
+
+      utterance.onend = () => setSpeakingMessageId(null);
+      utterance.onerror = () => setSpeakingMessageId(null);
+      
+      setSpeakingMessageId(id);
+      window.speechSynthesis.speak(utterance);
+    }
+  }, [speakingMessageId]);
+
+  // Copy to clipboard helper
+  const copyToClipboard = useCallback((text: string) => {
+    if (typeof navigator === "undefined" || !navigator.clipboard) return;
+    navigator.clipboard.writeText(text);
+  }, []);
+
   // Optimized todo operations
   const handleAddTodo = useCallback(
     (e: React.FormEvent) => {
@@ -248,11 +339,16 @@ export default function ZiyoBuddyPage() {
   );
 
   const toggleTodo = useCallback((id: number) => {
-    setTodoList((prev) =>
-      prev.map((item) =>
+    setTodoList((prev) => {
+      const updated = prev.map((item) =>
         item.id === id ? { ...item, done: !item.done } : item
-      )
-    );
+      );
+      const itemBefore = prev.find((item) => item.id === id);
+      if (itemBefore && !itemBefore.done) {
+        setXp((x) => x + 25);
+      }
+      return updated;
+    });
   }, []);
 
   const deleteTodo = useCallback((id: number) => {
@@ -294,7 +390,7 @@ export default function ZiyoBuddyPage() {
       : 0;
 
   return (
-    <div className="h-screen bg-gradient-to-br from-background via-background to-muted/30 flex flex-col relative overflow-hidden">
+    <div className="h-[100dvh] bg-gradient-to-br from-background via-background to-muted/30 flex flex-col relative overflow-hidden">
       {/* Animated Background Elements */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-10 w-72 h-72 bg-primary/10 rounded-full blur-3xl animate-float" />
@@ -344,7 +440,26 @@ export default function ZiyoBuddyPage() {
           </div>
 
           {/* Right: Burger & Stats */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {/* Level & XP HUD (Visible on all devices!) */}
+            <div className="flex items-center gap-2 bg-gradient-to-r from-primary/10 to-accent/10 border border-primary/20 px-2.5 py-1 rounded-xl smooth-transition hover:scale-105 select-none shadow-sm">
+              <div className="w-5 h-5 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center text-[10px] font-bold text-white shadow-sm">
+                {level}
+              </div>
+              <div className="flex flex-col">
+                <span className="text-[9px] font-bold text-primary/95 leading-none">Daraja</span>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <div className="w-12 sm:w-16 bg-muted/60 h-1.5 rounded-full overflow-hidden border border-border/30">
+                    <div
+                      className="h-full bg-gradient-to-r from-primary to-accent transition-all duration-300"
+                      style={{ width: `${(xp / (level * 100)) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-[8px] font-mono text-muted-foreground/90 font-semibold">{xp}/{level * 100} XP</span>
+                </div>
+              </div>
+            </div>
+
             <div className="hidden sm:flex items-center gap-2">
               <Badge
                 variant="secondary"
@@ -384,7 +499,7 @@ export default function ZiyoBuddyPage() {
 
       {/* Drawer */}
       <div
-        className={`fixed top-0 right-0 h-full w-full sm:w-72 max-w-full z-[999] bg-background shadow-2xl border-l border-border transform transition-transform duration-300 ease-in-out ${
+        className={`fixed top-0 right-0 h-full w-full sm:w-72 max-w-full z-[999] bg-background shadow-2xl border-l border-border flex flex-col transform transition-transform duration-300 ease-in-out ${
           drawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
         style={{ willChange: "transform" }}
@@ -425,7 +540,7 @@ export default function ZiyoBuddyPage() {
           </div>
         </div>
 
-        <ScrollArea className="flex-1 px-4 py-3 custom-scrollbar">
+        <div className="flex-1 px-4 py-3 overflow-y-auto custom-scrollbar scroll-smooth" style={{ WebkitOverflowScrolling: "touch" }}>
           <ul className="space-y-2">
             {todoList.map((item) => (
               <li
@@ -479,7 +594,7 @@ export default function ZiyoBuddyPage() {
               </li>
             ))}
           </ul>
-        </ScrollArea>
+        </div>
         <form
           onSubmit={handleAddTodo}
           className="flex gap-2 px-4 py-3 border-t border-border/50"
@@ -618,9 +733,52 @@ export default function ZiyoBuddyPage() {
                 </div>
               </div>
 
+              {/* Tutor Rejimi Selector */}
+              <div className="bg-background/40 backdrop-blur-md px-3 py-2 border-b border-border/40 flex items-center justify-between flex-shrink-0 gap-2 overflow-x-auto scrollbar-none select-none">
+                <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/85 whitespace-nowrap flex items-center gap-1">
+                  <Brain className="w-3.5 h-3.5 text-primary" />
+                  REJIM:
+                </span>
+                <div className="flex bg-muted/70 p-0.5 rounded-lg items-center gap-0.5 shadow-inner">
+                  <button
+                    onClick={() => setLearningMode("explain")}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-[10px] sm:text-xs font-semibold rounded-md smooth-transition ${
+                      learningMode === "explain"
+                        ? "bg-background text-primary shadow-sm scale-102"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Tushuntirish</span>
+                  </button>
+                  <button
+                    onClick={() => setLearningMode("quiz")}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-[10px] sm:text-xs font-semibold rounded-md smooth-transition ${
+                      learningMode === "quiz"
+                        ? "bg-background text-primary shadow-sm scale-102"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <GraduationCap className="w-3 h-3" />
+                    <span>Kviz-Test</span>
+                  </button>
+                  <button
+                    onClick={() => setLearningMode("summary")}
+                    className={`flex items-center gap-1 px-2.5 py-1 text-[10px] sm:text-xs font-semibold rounded-md smooth-transition ${
+                      learningMode === "summary"
+                        ? "bg-background text-primary shadow-sm scale-102"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <BookOpen className="w-3 h-3" />
+                    <span>Konspekt</span>
+                  </button>
+                </div>
+              </div>
+
               {/* Messages Area */}
               <div className="flex-1 bg-card/50 backdrop-blur-sm overflow-hidden flex flex-col min-h-0">
-                <ScrollArea className="flex-1 custom-scrollbar">
+                <div className="flex-1 overflow-y-auto custom-scrollbar scroll-smooth" style={{ WebkitOverflowScrolling: "touch" }}>
                   <div className="p-4 space-y-3">
                     {messages.map((message, index) => (
                       <div
@@ -644,7 +802,35 @@ export default function ZiyoBuddyPage() {
                         >
                           {/* Message Actions */}
                           {!message.isUser && (
-                            <div className="absolute -top-2 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 smooth-transition message-actions">
+                            <div className="absolute -top-3 -right-2 flex gap-1 opacity-0 group-hover:opacity-100 smooth-transition message-actions bg-background/95 backdrop-blur-md rounded-lg p-0.5 shadow-md border border-border/40 z-10">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => copyToClipboard(message.text)}
+                                className="h-6 w-6 smooth-transition hover:scale-110 focus-visible-ring text-muted-foreground hover:text-foreground"
+                                aria-label="Nusxa olish"
+                                title="Nusxalash"
+                              >
+                                <Copy className="w-3 h-3" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => toggleSpeech(message.id, message.text)}
+                                className={`h-6 w-6 smooth-transition hover:scale-110 focus-visible-ring ${
+                                  speakingMessageId === message.id
+                                    ? "text-primary animate-pulse"
+                                    : "text-muted-foreground hover:text-foreground"
+                                }`}
+                                aria-label={speakingMessageId === message.id ? "Durdirish" : "Ovozli o'qish"}
+                                title={speakingMessageId === message.id ? "Durdirish" : "Tinglash"}
+                              >
+                                {speakingMessageId === message.id ? (
+                                  <VolumeX className="w-3 h-3 text-destructive" />
+                                ) : (
+                                  <Volume2 className="w-3 h-3" />
+                                )}
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -682,17 +868,37 @@ export default function ZiyoBuddyPage() {
                             </div>
                           )}
 
-                          <div className="max-h-56 sm:max-h-72 overflow-y-auto overflow-x-hidden custom-scrollbar">
-                            <div
-                              className="text-pretty leading-relaxed text-sm"
-                              style={{
-                                wordBreak: "break-word",
-                                overflowWrap: "anywhere",
-                                whiteSpace: "pre-wrap",
+                          <div className={`text-pretty leading-relaxed text-sm prose dark:prose-invert max-w-none ${
+                            message.isUser ? "text-primary-foreground animate-fade-in" : "text-foreground animate-fade-in"
+                          }`}>
+                            <ReactMarkdown
+                              components={{
+                                p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
+                                h2: ({ children }) => <h2 className="text-base font-semibold mt-3 mb-1 text-primary dark:text-primary-foreground/90">{children}</h2>,
+                                h3: ({ children }) => <h3 className="text-sm font-semibold mt-2 mb-1 text-accent dark:text-accent-foreground/90">{children}</h3>,
+                                ul: ({ children }) => <ul className="list-disc pl-4 mb-2 space-y-1">{children}</ul>,
+                                ol: ({ children }) => <ol className="list-decimal pl-4 mb-2 space-y-1">{children}</ol>,
+                                li: ({ children }) => <li className="text-sm mb-0.5">{children}</li>,
+                                strong: ({ children }) => <strong className="font-semibold text-foreground/90 dark:text-white/95">{children}</strong>,
+                                code: ({ className, children, ...props }: any) => {
+                                  const match = /language-(\w+)/.exec(className || "");
+                                  const isInline = !match;
+                                  return !isInline ? (
+                                    <pre className="bg-muted-foreground/10 dark:bg-black/30 text-foreground dark:text-white p-3 rounded-lg overflow-x-auto my-2 border border-border/40 dark:border-white/10 font-mono text-xs max-w-full">
+                                      <code className={className} {...props}>
+                                        {children}
+                                      </code>
+                                    </pre>
+                                  ) : (
+                                    <code className="bg-muted-foreground/15 dark:bg-black/25 px-1.5 py-0.5 rounded font-mono text-xs" {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                }
                               }}
                             >
                               {message.text}
-                            </div>
+                            </ReactMarkdown>
                           </div>
                           <div className="text-[10px] opacity-70 mt-1 flex-shrink-0 flex items-center gap-1">
                             {message.timestamp.toLocaleTimeString("uz-UZ", {
@@ -709,61 +915,81 @@ export default function ZiyoBuddyPage() {
                         </div>
                       </div>
                     ))}
-                    {isLoading && isTyping && (
-                      <div className="flex justify-start animate-fade-in-up">
-                        <div className="bg-muted/80 backdrop-blur-sm rounded-2xl px-3 py-2 border border-border/50">
-                          <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-accent rounded-full typing-dot" />
-                            <div className="w-2 h-2 bg-accent rounded-full typing-dot" />
-                            <div className="w-2 h-2 bg-accent rounded-full typing-dot" />
+                    {isLoading && (
+                      <div className="flex justify-start message-enter">
+                        <div className="bg-muted/80 backdrop-blur-sm rounded-2xl px-4 py-2.5 border border-border/40 flex items-center gap-2 shadow-sm">
+                          <div className="flex gap-1.5 items-center">
+                            <div className="w-2 h-2 bg-primary rounded-full typing-dot" />
+                            <div className="w-2 h-2 bg-primary rounded-full typing-dot" />
+                            <div className="w-2 h-2 bg-primary rounded-full typing-dot" />
                           </div>
+                          <span className="text-xs text-muted-foreground/80 ml-1 font-medium animate-pulse">ZiyoBuddy yozmoqda...</span>
                         </div>
                       </div>
                     )}
                     <div ref={messagesEndRef} />
                   </div>
-                </ScrollArea>
+                </div>
               </div>
             </div>
           )}
         </div>
 
         {/* Input Area - Always Visible */}
-        <div className="sticky bottom-0 bg-background/95 backdrop-blur-md border-t border-border/50 z-50 animate-fade-in-up flex-shrink-0">
-          <div className="px-4 py-2 max-w-3xl mx-auto">
-            <form onSubmit={handleSubmit}>
-              <div className="flex gap-2">
-                <div className="flex-1 relative">
-                  <Input
-                    ref={inputRef}
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    placeholder="Savolingizni yozing..."
-                    className="w-full h-9 text-sm bg-background border-2 input-enhanced focus-visible-ring pr-10"
-                    disabled={isLoading}
-                  />
+        <div className="sticky bottom-0 bg-gradient-to-t from-background via-background/95 to-transparent pt-6 pb-6 z-50 flex-shrink-0 animate-fade-in-up">
+          <div className="px-4 max-w-3xl mx-auto">
+            <form onSubmit={handleSubmit} className="relative">
+              <div className="relative flex items-center border border-border/60 bg-background/85 backdrop-blur-md rounded-2xl shadow-xl hover:shadow-2xl hover:border-primary/30 transition-all duration-300">
+                <textarea
+                  ref={inputRef}
+                  rows={1}
+                  value={input}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    if (inputRef.current) {
+                      inputRef.current.style.height = "auto";
+                      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 160)}px`;
+                    }
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSubmit(e);
+                    }
+                  }}
+                  placeholder="Savolingizni yoki vazifangizni yozing..."
+                  className="w-full py-3.5 pl-4 pr-24 text-sm bg-transparent rounded-2xl outline-none border-none resize-none scrollbar-none leading-relaxed text-foreground placeholder:text-muted-foreground/70"
+                  disabled={isLoading}
+                />
+                <div className="absolute right-2.5 flex items-center gap-1.5">
                   {input && (
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon"
-                      className="absolute right-1 top-1/2 -translate-y-1/2 h-6 w-6 smooth-transition hover:scale-110 focus-visible-ring"
-                      onClick={() => setInput("")}
+                      className="h-8 w-8 text-muted-foreground hover:text-foreground smooth-transition hover:scale-105 rounded-xl"
+                      onClick={() => {
+                        setInput("");
+                        if (inputRef.current) inputRef.current.style.height = "auto";
+                      }}
                       aria-label="Tozalash"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-4 h-4" />
                     </Button>
                   )}
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!input.trim() || isLoading}
+                    className="h-8 w-8 smooth-transition hover:scale-105 button-press btn-glow shadow-md bg-gradient-to-r from-primary to-accent text-white hover:from-primary/95 hover:to-accent/95 rounded-xl"
+                  >
+                    <Send className="w-4 h-4" />
+                  </Button>
                 </div>
-                <Button
-                  type="submit"
-                  size="default"
-                  disabled={!input.trim() || isLoading}
-                  className="px-3 smooth-transition hover:scale-105 button-press btn-glow shadow-lg bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 focus-visible-ring"
-                >
-                  <Send className="w-4 h-4" />
-                </Button>
               </div>
+              <p className="text-[10px] text-center text-muted-foreground/50 mt-1.5">
+                ZiyoBuddy AI ba'zan xato qilishi mumkin. Muhim ma'lumotlarni tekshirib oling.
+              </p>
             </form>
           </div>
         </div>
